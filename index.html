@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZANN Interactive Game Hub</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background-color: #0b0c10; color: #fff; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 10px; }
+
+        /* Navigasi Ruangan di Atas */
+        .room-nav {
+            display: flex;
+            gap: 3px;
+            width: 100%;
+            max-width: 500px;
+            background: #1f2833;
+            padding: 6px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            overflow-x: auto;
+        }
+        .room-btn {
+            flex: 1;
+            padding: 8px 4px;
+            border: none;
+            border-radius: 6px;
+            background: #0b0c10;
+            color: #c5c6c7;
+            font-weight: bold;
+            font-size: 9px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: 0.2s;
+        }
+        .room-btn.active { background: #66fcf1; color: #0b0c10; }
+
+        /* Panel Kontrol Universal */
+        .control-panel {
+            background: #1f2833;
+            width: 100%;
+            max-width: 500px;
+            padding: 12px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .input-row { display: flex; gap: 6px; margin-bottom: 8px; }
+        input, select, textarea {
+            flex: 1;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #45a29e;
+            background: #0b0c10;
+            color: #fff;
+            font-size: 12px;
+            outline: none;
+        }
+        button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-connect { background: #66fcf1; color: #0b0c10; }
+        .btn-action { background: #e50914; color: #fff; width: 100%; margin-top: 5px; }
+        .btn-shuffle { background: #f39c12; color: #000; width: 100%; margin-top: 5px; }
+        .btn-reset { background: #e74c3c; color: #fff; width: 100%; margin-top: 5px; }
+        
+        .settings-grid { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; font-size: 12px; }
+        .settings-grid label { display: flex; flex-direction: column; color: #c5c6c7; gap: 3px; }
+
+        /* Kotak Timer Mandiri per Ruangan */
+        .room-timer-box {
+            background: #1f2833;
+            border: 1px solid #45a29e;
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .room-timer-display { font-size: 14px; font-weight: bold; color: #ff4757; }
+
+        /* Kontainer Ruangan Game */
+        .game-room { display: none; width: 100%; max-width: 500px; flex-direction: column; align-items: center; }
+        .game-room.active { display: flex; }
+
+        /* RUANGAN 1: OPEN BOX KUSTOM */
+        .box-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            width: 100%;
+            margin-bottom: 8px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .box-card {
+            background: #1e1e1e;
+            border: 3px solid #f1c40f;
+            border-radius: 12px;
+            height: 85px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            cursor: pointer;
+            position: relative;
+        }
+        .box-card.opened { background: #27ae60; border-color: #2ecc71; }
+        .box-card .owner { font-size: 10px; color: #f39c12; margin-top: 2px; }
+        .box-card .prize { font-size: 11px; color: #66fcf1; margin-top: 2px; font-weight: bold; }
+
+        .custom-config-box {
+            background: #1f2833;
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
+
+        /* RUANGAN 2: ROULETTE */
+        .roulette-viewport {
+            width: 100%;
+            background: #111;
+            border: 2px solid #66fcf1;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            height: 110px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .roulette-pointer {
+            position: absolute;
+            top: 0; left: 50%;
+            transform: translateX(-50%);
+            width: 0; height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 15px solid #ff4757;
+            z-index: 10;
+        }
+        .roulette-track {
+            display: flex;
+            gap: 8px;
+            position: absolute;
+            will-change: transform;
+            left: 0;
+        }
+        .roulette-item {
+            min-width: 85px;
+            height: 85px;
+            background: #1f2833;
+            border: 2px solid #45a29e;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+            padding: 4px;
+        }
+
+        /* RUANGAN 3: GIVEAWAY TEBAK ANGKA */
+        .giveaway-box {
+            background: #1f2833;
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .secret-number-display { font-size: 32px; font-weight: 900; color: #66fcf1; margin: 10px 0; }
+        .guess-list { max-height: 150px; overflow-y: auto; background: #0b0c10; padding: 8px; border-radius: 6px; text-align: left; font-size: 12px; margin-top: 10px; }
+
+        /* RUANGAN 4: ELIMINASI SLOT BEBAS */
+        .elim-banner {
+            width: 100%;
+            background: linear-gradient(135deg, #1f1c2c, #928dab);
+            border: 2px solid #66fcf1;
+            border-radius: 12px;
+            padding: 8px;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .elim-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            width: 100%;
+            max-height: 250px;
+            overflow-y: auto;
+            background: #1f2833;
+            padding: 6px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+        }
+        .elim-card {
+            background: #0b0c10;
+            border: 1px solid #45a29e;
+            border-radius: 6px;
+            padding: 8px 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            font-size: 10px;
+            min-height: 50px;
+        }
+        .elim-card.highlight { border: 2px solid #ff4757; box-shadow: 0 0 8px #ff4757; transform: scale(1.05); z-index: 2; }
+        .elim-card.eliminated { opacity: 0.25; filter: grayscale(100%); }
+        .elim-card.eliminated::after { content: '❌'; position: absolute; font-size: 18px; }
+        .elim-card.winner-card { border: 2px solid #2ed573 !important; box-shadow: 0 0 15px #2ed573 !important; z-index: 5; }
+        .elim-card .uname { font-size: 10px; font-weight: bold; color: #f1c40f; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 90%; margin-top: 2px; }
+
+        /* Kotak Baca Komentar Pemenang */
+        .winner-chat-box {
+            background: #0b0c10;
+            border: 2px solid #2ed573;
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 8px;
+            width: 100%;
+            font-size: 12px;
+            text-align: left;
+            box-shadow: 0 0 10px rgba(46, 213, 115, 0.4);
+            display: none;
+        }
+
+        /* RUANGAN 5: LELANG BANYAK-BANYAKAN KOIN */
+        .auction-box {
+            background: #1f2833;
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .auction-bid-display { font-size: 28px; font-weight: 900; color: #f1c40f; margin: 8px 0; }
+        .auction-leader { font-size: 16px; color: #66fcf1; font-weight: bold; margin-bottom: 10px; }
+        .leaderboard-box { max-height: 120px; overflow-y: auto; background: #0b0c10; padding: 6px; border-radius: 6px; text-align: left; font-size: 11px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+    <!-- Navigasi Ruangan di Atas -->
+    <div class="room-nav">
+        <button class="room-btn active" onclick="switchRoom(1)">🎁 Box</button>
+        <button class="room-btn" onclick="switchRoom(2)">🎡 Spin</button>
+        <button class="room-btn" onclick="switchRoom(3)">🎯 Tebak</button>
+        <button class="room-btn" onclick="switchRoom(4)">🔥 Elim</button>
+        <button class="room-btn" onclick="switchRoom(5)">🪙 Lelang</button>
+    </div>
+
+    <!-- Panel Pengaturan & Koneksi Universal -->
+    <div class="control-panel">
+        <div class="input-row">
+            <input type="text" id="tiktok-username" placeholder="Username TikTok (@...)">
+            <button class="btn-connect" onclick="connectTikTok()">Connect</button>
+        </div>
+        <div id="connection-status" style="font-size: 11px; color: #c5c6c7; margin-bottom: 6px;">Status: Belum Terhubung</div>
+
+        <div class="input-row">
+            <input type="text" id="manual-name" placeholder="Nama Peserta Manual">
+            <button style="background:#2ecc71; color:#000;" onclick="addManualParticipant()">+ Tambah Orang</button>
+        </div>
+
+        <div class="settings-grid">
+            <label>Mode Permainan:
+                <select id="game-mode">
+                    <option value="locked">Locked Mode (Waktu Habis = Gift Ditolak)</option>
+                    <option value="nolocked">Open Mode / No Locked (Waktu Habis Tetap Bisa Masuk)</option>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <!-- ================= RUANGAN 1: OPEN BOX ================= -->
+    <div id="room-1" class="game-room active">
+        <div class="room-timer-box">
+            <span style="font-size:12px;">Waktu Kotak:</span>
+            <div class="room-timer-display" id="timer-1">01:00</div>
+            <input type="number" id="dur-1" value="60" style="width:60px; text-align:center;" min="1" max="36000">
+        </div>
+
+        <div class="custom-config-box">
+            <label style="color:#66fcf1; font-weight:bold; display:block; margin-bottom:4px;">Atur Hadiah Kotak (Pemisah Koma):</label>
+            <div class="input-row" style="margin-bottom:5px;">
+                <input type="text" id="box-prizes-input" value="10 Robux, 20 Robux, 50 Robux, 100 Robux, Zonk, Zann, Gift Spesial">
+                <button style="background:#f39c12; color:#000;" onclick="applyCustomBoxes()">Set Hadiah</button>
+            </div>
+            <div class="input-row">
+                <button style="background:#2ecc71; color:#000; flex:1;" onclick="addSingleBox()">+ Tambah 1 Kotak</button>
+                <button style="background:#e50914; color:#fff; flex:1;" onclick="removeSingleBox()">- Kurangi 1 Kotak</button>
+            </div>
+        </div>
+
+        <div class="box-grid" id="box-grid-container"></div>
+        <button class="btn-shuffle" onclick="shuffleBoxes()">🔀 ACAK KOTAK & HADIAH</button>
+        <button class="btn-action" onclick="startRoomTimer(1)">MULAI WAKTU KOTAK</button>
+    </div>
+
+    <!-- ================= RUANGAN 2: ROULETTE ================= -->
+    <div id="room-2" class="game-room">
+        <div class="room-timer-box">
+            <span style="font-size:12px;">Waktu Spin:</span>
+            <div class="room-timer-display" id="timer-2">01:00</div>
+            <input type="number" id="dur-2" value="60" style="width:60px; text-align:center;" min="1" max="36000">
+        </div>
+        <div class="custom-config-box">
+            <label style="color:#66fcf1; font-weight:bold; display:block; margin-bottom:4px;">Atur Daftar Spin (Pemisah Koma):</label>
+            <div class="input-row">
+                <input type="text" id="custom-roulette-input" value="10 Robux, 20 Robux, 50 Robux, 100 Robux, Zann, Host, Spesial Gift">
+                <button style="background:#f39c12; color:#000;" onclick="applyCustomRoulette()">Terapkan</button>
+            </div>
+        </div>
+        <div class="roulette-viewport">
+            <div class="roulette-pointer"></div>
+            <div class="roulette-track" id="roulette-track"></div>
+        </div>
+        <button class="btn-action" onclick="startRoulette()">PUTAR ROULETTE</button>
+    </div>
+
+    <!-- ================= RUANGAN 3: GIVEAWAY TEBAK ANGKA ================= -->
+    <div id="room-3" class="game-room">
+        <div class="room-timer-box">
+            <span style="font-size:12px;">Waktu Tebak:</span>
+            <div class="room-timer-display" id="timer-3">01:00</div>
+            <input type="number" id="dur-3" value="60" style="width:60px; text-align:center;" min="1" max="36000">
+        </div>
+        <div class="giveaway-box">
+            <h3>Giveaway Tebak Angka</h3>
+            <div class="custom-config-box" style="text-align: left; margin-top: 8px;">
+                <label style="color:#66fcf1; font-weight:bold; display:block; margin-bottom:4px;">Atur Angka Rahasia Sendiri:</label>
+                <div class="input-row">
+                    <input type="number" id="custom-secret-number" placeholder="Ketik angka rahasia..." value="45">
+                    <button style="background:#2ecc71; color:#000;" onclick="setCustomSecretNumber()">Simpan Angka</button>
+                </div>
+            </div>
+            <div class="secret-number-display" id="secret-number-view">??</div>
+            <p id="giveaway-status" style="font-size:12px; color:#c5c6c7;">Ketik angka tebakan di komentar TikTok!</p>
+            <button class="btn-action" onclick="startGiveaway()">Mulai Tebak Angka</button>
+            <div class="guess-list" id="guess-list-container">Log Tebakan Penonton:</div>
+        </div>
+    </div>
+
+    <!-- ================= RUANGAN 4: ELIMINASI SLOT BEBAS ================= -->
+    <div id="room-4" class="game-room">
+        <div class="room-timer-box">
+            <span style="font-size:12px;">Waktu Pendaftaran:</span>
+            <div class="room-timer-display" id="timer-4">01:00</div>
+            <input type="number" id="dur-4" value="60" style="width:60px; text-align:center;" min="1" max="36000">
+        </div>
+        <div class="elim-banner">
+            <div id="elim-title" style="font-size:11px; color:#66fcf1; font-weight:bold;">ZANN ELIMINATION MODE</div>
+            <div id="elim-active" style="font-size:16px; font-weight:900; margin:3px 0;">MENUNGGU WAKTU...</div>
+            <div id="elim-status" style="font-size:11px; color:#ff4757;">Total Peserta: 0</div>
+        </div>
+        <div class="elim-grid" id="elim-grid-container"></div>
+        <button class="btn-action" onclick="startEliminationCountdown()">⏱️ MULAI WAKTU & ELIMINASI</button>
+        <button class="btn-reset" onclick="resetEliminationGame()">🔄 RESET ELIMINASI</button>
+        
+        <!-- Kotak Baca Komentar Pemenang -->
+        <div class="winner-chat-box" id="winner-chat-box">
+            💬 <b>Komentar Pemenang (@<span id="winner-name-label">-</span>):</b>
+            <div id="winner-chat-text" style="color:#2ed573; margin-top:4px; font-weight:bold; font-size:13px;">Menunggu pemenang berkomentar di chat LIVE...</div>
+        </div>
+    </div>
+
+    <!-- ================= RUANGAN 5: LELANG BANYAK-BANYAKAN KOIN ================= -->
+    <div id="room-5" class="game-room">
+        <div class="room-timer-box">
+            <span style="font-size:12px;">Waktu Lelang:</span>
+            <div class="room-timer-display" id="timer-5">01:00</div>
+            <input type="number" id="dur-5" value="60" style="width:60px; text-align:center;" min="1" max="36000">
+        </div>
+        <div class="auction-box">
+            <h3>🪙 LELANG KOIN (BANYAK-BANYAKAN)</h3>
+            <div class="custom-config-box" style="text-align: left; margin-top: 8px;">
+                <label style="color:#66fcf1; font-weight:bold; display:block; margin-bottom:4px;">Nama Barang Lelang:</label>
+                <div class="input-row">
+                    <input type="text" id="auction-item-name" placeholder="Nama Barang Lelang" value="Barang Spesial Zann">
+                    <button style="background:#f39c12; color:#000;" onclick="setAuctionItem()">Set Lelang</button>
+                </div>
+            </div>
+            <div style="font-size: 11px; color: #c5c6c7; margin-top: 5px;" id="auction-item-title">Barang: Barang Spesial Zann</div>
+            <div class="auction-bid-display" id="auction-highest-bid">0 Koin</div>
+            <div class="auction-leader" id="auction-highest-bidder">Belum Ada Penawar</div>
+            <p id="auction-status" style="font-size:12px; color:#c5c6c7;">Kirim Gift sebanyak-banyaknya untuk memimpin!</p>
+            <button class="btn-action" onclick="startRoomTimer(5)">MULAI WAKTU LELANG</button>
+            <button class="btn-reset" onclick="resetAuctionGame()">🔄 RESET LELANG</button>
+            <div class="leaderboard-box" id="auction-leaderboard">Peringkat Koin Penonton:</div>
+        </div>
+    </div>
+
+    <!-- Socket.IO Client -->
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
+    <script>
+        const socket = io("https://3jx41nsx8jy0u.pike.replit.dev");
+        let participants = [];
+        let activeRoom = 1;
+        let roomTimers = { 1: null, 2: null, 3: null, 4: null, 5: null };
+        let roomTimesLeft = { 1: 60, 2: 60, 3: 60, 4: 60, 5: 60 };
+
+        // Data Ruangan 1 (Open Box Dynamic)
+        let boxPrizes = ["10 Robux", "20 Robux", "50 Robux", "100 Robux", "Zonk", "Zann", "Gift Spesial"];
+        let boxData = [];
+
+        function initBoxData() {
+            boxData = [];
+            for(let i=0; i<boxPrizes.length; i++) {
+                boxData.push({ id: i+1, prize: boxPrizes[i], owner: "Kosong", opened: false });
+            }
+            renderBoxes();
+        }
+
+        function renderBoxes() {
+            const boxContainer = document.getElementById('box-grid-container');
+            boxContainer.innerHTML = '';
+            boxData.forEach((box, index) => {
+                let displayContent = box.opened ? `<div class="prize">🎁 ${box.prize}</div>` : `<span>#${index + 1}</span>`;
+                let cardClass = box.opened ? 'box-card opened' : 'box-card';
+                boxContainer.innerHTML += `
+                    <div class="${cardClass}" onclick="openBoxItem(${index})">
+                        ${displayContent}
+                        <div class="owner">${box.owner}</div>
+                    </div>
+                `;
+            });
+        }
+
+        function applyCustomBoxes() {
+            let val = document.getElementById('box-prizes-input').value;
+            if(!val) return alert("Masukkan daftar hadiah!");
+            boxPrizes = val.split(',').map(item => item.trim()).filter(item => item.length > 0);
+            initBoxData();
+            alert("Daftar hadiah kotak berhasil disimpan!");
+        }
+
+        function addSingleBox() {
+            boxPrizes.push("Hadiah Kustom");
+            initBoxData();
+        }
+
+        function removeSingleBox() {
+            if(boxPrizes.length <= 1) return alert("Minimal 1 kotak!");
+            boxPrizes.pop();
+            initBoxData();
+        }
+
+        initBoxData();
+
+        // Data Ruangan 4 (Eliminasi Dinamis)
+        let elimPlayers = [];
+        let isElimRunning = false;
+        let currentWinnerName = null;
+
+        function renderElimGrid() {
+            const grid = document.getElementById('elim-grid-container');
+            grid.innerHTML = '';
+            if(elimPlayers.length === 0) {
+                grid.innerHTML = `<div style="grid-column: span 4; text-align:center; color:#c5c6c7; padding:20px; font-size:11px;">Belum ada peserta masuk. Kirim gift atau tambah manual!</div>`;
+                return;
+            }
+            elimPlayers.forEach((p, index) => {
+                let cardClass = p.eliminated ? 'elim-card eliminated' : 'elim-card';
+                grid.innerHTML += `
+                    <div class="${cardClass}" id="elim-slot-${index}">
+                        <div style="font-size:8px; color:#45a29e;">#${index + 1}</div>
+                        <div class="uname">${p.username}</div>
+                    </div>
+                `;
+            });
+        }
+        renderElimGrid();
+
+        // Data Ruangan 5 (Lelang Koin Akumulatif)
+        let auctionCoinsMap = {};
+        let auctionActive = false;
+
+        // Pindah Ruangan
+        function switchRoom(roomNum) {
+            activeRoom = roomNum;
+            document.querySelectorAll('.room-btn').forEach((btn, idx) => {
+                btn.classList.toggle('active', idx + 1 === roomNum);
+            });
+            document.querySelectorAll('.game-room').forEach((room, idx) => {
+                room.classList.toggle('active', idx + 1 === roomNum);
+            });
+        }
+
+        // Koneksi TikTok
+        function connectTikTok() {
+            let user = document.getElementById('tiktok-username').value.trim().replace('@','');
+            if(!user) return alert("Masukkan Username TikTok!");
+            socket.emit('set-username', user);
+            document.getElementById('connection-status').innerText = "Menghubungkan ke @" + user + "...";
+            document.getElementById('connection-status').style.color = "#22c55e";
+        }
+
+        // Tambah Peserta Manual di Ruangan Eliminasi
+        function addManualParticipant() {
+            let mode = document.getElementById('game-mode').value;
+            // Jika Locked Mode dan waktu habis, tolak. Jika No Locked ('nolocked'), abaikan waktu habis.
+            if(activeRoom === 4 && mode === 'locked' && roomTimesLeft[4] <= 0) {
+                return alert("Waktu habis! Locked Mode aktif, pendaftaran manual ditutup.");
+            }
+
+            let nameInput = document.getElementById('manual-name');
+            let name = nameInput.value.trim();
+            if(!name) return alert("Masukkan nama peserta!");
+            registerParticipant(name, 1);
+            nameInput.value = "";
+        }
+
+        socket.on('tiktok-gift', (data) => {
+            let mode = document.getElementById('game-mode').value;
+
+            // LOGIKA PENGAMANAN MODE:
+            // Jika mode 'locked' DAN waktu sudah habis (<= 0), tolak gift baru.
+            // Jika mode 'nolocked' (Open Mode), waktu habis TETAP DIIZINKAN masuk.
+            if(activeRoom === 4 && mode === 'locked' && roomTimesLeft[4] <= 0) {
+                console.log("Locked Mode aktif & waktu habis: Gift ditolak.");
+                return; 
+            }
+
+            let giftCoins = data.diamondCount || 1;
+            registerParticipant(data.username, giftCoins);
+
+            if(activeRoom === 5 && auctionActive) {
+                processAccumulatedAuction(data.username, giftCoins);
+            }
+        });
+
+        socket.on('tiktok-chat', (data) => {
+            if(activeRoom === 3) {
+                checkGiveawayGuess(data.username, data.comment);
+            } else if(activeRoom === 4 && currentWinnerName && data.username.toLowerCase() === currentWinnerName.toLowerCase()) {
+                document.getElementById('winner-chat-box').style.display = 'block';
+                document.getElementById('winner-name-label').innerText = data.username;
+                document.getElementById('winner-chat-text').innerText = `"${data.comment}"`;
+            }
+        });
+
+        function registerParticipant(name, coins = 1) {
+            participants.push(name);
+            
+            // Ruangan 1: Open Box
+            let emptyBox = boxData.find(b => b.owner === "Kosong");
+            if(emptyBox) {
+                emptyBox.owner = name;
+                emptyBox.opened = true;
+                renderBoxes();
+            }
+
+            // Ruangan 4: Eliminasi
+            if(activeRoom === 4) {
+                elimPlayers.push({ username: name, eliminated: false });
+                renderElimGrid();
+                document.getElementById('elim-status').innerText = `Total Peserta: ${elimPlayers.length}`;
+            }
+        }
+
+        // Timer Mandiri per Ruangan
+        function startRoomTimer(roomNum, callback) {
+            if(roomTimers[roomNum]) clearInterval(roomTimers[roomNum]);
+            roomTimesLeft[roomNum] = parseInt(document.getElementById(`dur-${roomNum}`).value) || 60;
+            
+            if(roomNum === 5) {
+                auctionActive = true;
+                auctionCoinsMap = {};
+                updateAuctionDisplay();
+            }
+
+            roomTimers[roomNum] = setInterval(() => {
+                if(roomTimesLeft[roomNum] > 0) {
+                    roomTimesLeft[roomNum]--;
+                    let h = Math.floor(roomTimesLeft[roomNum] / 3600);
+                    let m = Math.floor((roomTimesLeft[roomNum] % 3600) / 60);
+                    let s = roomTimesLeft[roomNum] % 60;
+                    document.getElementById(`timer-${roomNum}`).innerText = 
+                        `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+                } else {
+                    clearInterval(roomTimers[roomNum]);
+                    let mode = document.getElementById('game-mode').value;
+                    if(roomNum === 4) {
+                        if(mode === 'locked') {
+                            document.getElementById('elim-title').innerText = "WAKTU HABIS (LOCKED: DITUTUP)";
+                        } else {
+                            document.getElementById('elim-title').innerText = "OPEN MODE (BEBAS MASUK)";
+                        }
+                    }
+                    if(callback) callback();
+                }
+            }, 1000);
+        }
+
+        // --- RUANGAN 1: OPEN BOX ---
+        function shuffleBoxes() {
+            boxData.sort(() => Math.random() - 0.5);
+            boxData.forEach(b => {
+                b.opened = false;
+                b.owner = "Kosong";
+            });
+            renderBoxes();
+        }
+
+        function openBoxItem(index) { 
+            boxData[index].opened = true; 
+            renderBoxes(); 
+        }
+
+        // --- RUANGAN 2: ROULETTE ---
+        let rouletteItems = ["10 Robux", "20 Robux", "50 Robux", "100 Robux", "Zann", "Host", "Spesial Gift"];
+
+        function applyCustomRoulette() {
+            let inputVal = document.getElementById('custom-roulette-input').value;
+            if(!inputVal) return alert("Masukkan daftar spin terlebih dahulu!");
+            rouletteItems = inputVal.split(',').map(item => item.trim()).filter(item => item.length > 0);
+            initRoulette();
+            alert("Daftar spin roulette berhasil diperbarui!");
+        }
+
+        const track = document.getElementById('roulette-track');
+        function initRoulette() {
+            track.style.transition = 'none';
+            track.style.transform = 'translateX(0px)';
+            track.innerHTML = '';
+            for(let i=0; i<80; i++) {
+                let text = rouletteItems[i % rouletteItems.length];
+                track.innerHTML += `<div class="roulette-item"><span>🎁</span>${text}</div>`;
+            }
+        }
+        initRoulette();
+
+        function startRoulette() {
+            startRoomTimer(2, () => {});
+            initRoulette();
+            
+            track.style.transition = 'none';
+            track.style.transform = 'translateX(0px)';
+            
+            setTimeout(() => {
+                let randomDistance = Math.floor(Math.random() * 2000) + 3500;
+                track.style.transition = 'transform 4s cubic-bezier(0.05, 0.95, 0.15, 1)';
+                track.style.transform = `translateX(-${randomDistance}px)`;
+            }, 50);
+        }
+
+        // --- RUANGAN 3: GIVEAWAY TEBAK ANGKA ---
+        let secretNum = 45;
+
+        function setCustomSecretNumber() {
+            let val = parseInt(document.getElementById('custom-secret-number').value);
+            if(isNaN(val)) return alert("Masukkan angka yang valid!");
+            secretNum = val;
+            alert("Angka rahasia berhasil disimpan host: " + secretNum);
+        }
+
+        function startGiveaway() {
+            document.getElementById('secret-number-view').innerText = "??";
+            document.getElementById('giveaway-status').innerText = "Tebak angka rahasia di komentar TikTok!";
+            document.getElementById('guess-list-container').innerHTML = "Log Tebakan Penonton:";
+            startRoomTimer(3, () => {
+                document.getElementById('secret-number-view').innerText = secretNum;
+                document.getElementById('giveaway-status').innerText = "Waktu Habis! Angka Rahasia: " + secretNum;
+            });
+        }
+
+        function checkGiveawayGuess(user, comment) {
+            let guess = parseInt(comment.trim());
+            if(isNaN(guess)) return;
+            let list = document.getElementById('guess-list-container');
+            list.innerHTML += `<div><b>${user}</b> menebak: ${guess}</div>`;
+            list.scrollTop = list.scrollHeight;
+
+            if(guess === secretNum) {
+                document.getElementById('secret-number-view').innerText = secretNum;
+                document.getElementById('giveaway-status').innerHTML = `<span style="color:#2ed573; font-size:16px; font-weight:bold;">🎉 PEMENANG TEBAK ANGKA: @${user} (Angka: ${secretNum})</span>`;
+                if(roomTimers[3]) clearInterval(roomTimers[3]);
+            }
+        }
+
+        // --- RUANGAN 4: ELIMINASI ---
+        function startEliminationCountdown() {
+            let active = elimPlayers.filter(p => !p.eliminated);
+            if(active.length < 2) return alert("Minimal 2 pemain untuk memulai eliminasi!");
+
+            document.getElementById('elim-title').innerText = "WAKTU PENDAFTARAN BERJALAN...";
+            document.getElementById('winner-chat-box').style.display = 'none';
+            currentWinnerName = null;
+            
+            startRoomTimer(4, () => {
+                runEliminationGameLoop();
+            });
+        }
+
+        async function runEliminationGameLoop() {
+            if(isElimRunning) return;
+            isElimRunning = true;
+            document.getElementById('elim-title').innerText = "PROSES ELIMINASI DIMULAI!";
+
+            while(elimPlayers.filter(p => !p.eliminated).length > 1) {
+                let remainingIndices = elimPlayers
+                    .map((p, idx) => p.eliminated ? null : idx)
+                    .filter(v => v !== null);
+
+                for(let i=0; i<10; i++) {
+                    let randIdx = remainingIndices[Math.floor(Math.random() * remainingIndices.length)];
+                    document.getElementById(`elim-slot-${randIdx}`).classList.add('highlight');
+                    document.getElementById('elim-active').innerText = elimPlayers[randIdx].username;
+                    await sleep(100 + (i * 10));
+                    document.getElementById(`elim-slot-${randIdx}`).classList.remove('highlight');
+                }
+
+                let chosenIdx = remainingIndices[Math.floor(Math.random() * remainingIndices.length)];
+                elimPlayers[chosenIdx].eliminated = true;
+
+                renderElimGrid();
+                document.getElementById('elim-active').innerText = elimPlayers[chosenIdx].username;
+                document.getElementById('elim-status').innerText = "❌ TERELIMINASI!";
+                await sleep(1000);
+            }
+
+            let winner = elimPlayers.find(p => !p.eliminated);
+            let winnerIdx = elimPlayers.findIndex(p => !p.eliminated);
+
+            currentWinnerName = winner.username;
+
+            document.getElementById('elim-title').innerText = "🏆 PEMENANG ELIMINASI 🏆";
+            document.getElementById('elim-active').innerText = winner.username;
+            document.getElementById('elim-status').innerText = "SELAMAT PEMENANG!";
+            document.getElementById(`elim-slot-${winnerIdx}`).classList.add('winner-card');
+
+            document.getElementById('winner-chat-box').style.display = 'block';
+            document.getElementById('winner-name-label').innerText = winner.username;
+
+            isElimRunning = false;
+        }
+
+        function resetEliminationGame() {
+            if(roomTimers[4]) clearInterval(roomTimers[4]);
+            elimPlayers = [];
+            isElimRunning = false;
+            currentWinnerName = null;
+            roomTimesLeft[4] = parseInt(document.getElementById('dur-4').value) || 60;
+            document.getElementById('timer-4').innerText = "01:00";
+            document.getElementById('elim-title').innerText = "ZANN ELIMINATION MODE";
+            document.getElementById('elim-active').innerText = "MENUNGGU WAKTU...";
+            document.getElementById('elim-status').innerText = "Total Peserta: 0";
+            document.getElementById('winner-chat-box').style.display = 'none';
+            renderElimGrid();
+        }
+
+        // --- RUANGAN 5: LELANG BANYAK-BANYAKAN KOIN ---
+        function setAuctionItem() {
+            let itemName = document.getElementById('auction-item-name').value;
+            if(!itemName) return alert("Masukkan nama barang lelang!");
+            document.getElementById('auction-item-title').innerText = "Barang: " + itemName;
+            auctionCoinsMap = {};
+            updateAuctionDisplay();
+            alert("Lelang berhasil diatur!");
+        }
+
+        function processAccumulatedAuction(user, coins) {
+            if(!auctionActive) return;
+            if(!auctionCoinsMap[user]) auctionCoinsMap[user] = 0;
+            auctionCoinsMap[user] += coins;
+            updateAuctionDisplay();
+        }
+
+        function updateAuctionDisplay() {
+            let sorted = Object.entries(auctionCoinsMap).sort((a,b) => b[1] - a[1]);
+            let leaderEl = document.getElementById('auction-highest-bidder');
+            let bidEl = document.getElementById('auction-highest-bid');
+            let boardEl = document.getElementById('auction-leaderboard');
+
+            if(sorted.length === 0) {
+                leaderEl.innerText = "Belum Ada Penawar";
+                bidEl.innerText = "0 Koin";
+                boardEl.innerHTML = "Peringkat Koin Penonton:";
+                return;
+            }
+
+            leaderEl.innerText = "Tertinggi: @" + sorted[0][0];
+            bidEl.innerText = sorted[0][1] + " Koin";
+
+            let boardHTML = "<b>Peringkat Koin Penonton:</b><br>";
+            sorted.forEach((item, idx) => {
+                boardHTML += `${idx+1}. <b>@${item[0]}</b>: ${item[1]} Koin<br>`;
+            });
+            boardEl.innerHTML = boardHTML;
+        }
+
+        function resetAuctionGame() {
+            if(roomTimers[5]) clearInterval(roomTimers[5]);
+            auctionActive = false;
+            auctionCoinsMap = {};
+            roomTimesLeft[5] = parseInt(document.getElementById('dur-5').value) || 60;
+            document.getElementById('timer-5').innerText = "01:00";
+            document.getElementById('auction-highest-bid').innerText = "0 Koin";
+            document.getElementById('auction-highest-bidder').innerText = "Belum Ada Penawar";
+            document.getElementById('auction-status').innerText = "Kirim Gift sebanyak-banyaknya untuk memimpin!";
+            document.getElementById('auction-leaderboard').innerHTML = "Peringkat Koin Penonton:";
+        }
+
+        function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+    </script>
+</body>
+</html>
