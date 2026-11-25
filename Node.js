@@ -1,253 +1,224 @@
 
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const admin = require("firebase-admin");
-const crypto = require("crypto");
+import express from "express";
+import cors from "cors";
+import crypto from "crypto";
 
-if (!admin.apps.length) admin.initializeApp();
-
-const db = admin.firestore();
 const app = express();
+app.use(express.json({ limit: "32kb" }));
+
 const PORT = process.env.PORT || 3000;
-
-app.use(express.json({ limit: "1mb" }));
-
-const origins = (process.env.CORS_ORIGINS || "")
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const JWT_SECRET = process.env.JWT_SECRET;
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || "")
   .split(",")
-  .map(s => s.trim())
+  .map(x => x.trim())
   .filter(Boolean);
 
-app.use(cors({ origin: origins.length ? origins : true }));
+if (!ADMIN_PASSWORD || !JWT_SECRET) {
+  console.error("Set ADMIN_PASSWORD and JWT_SECRET in your environment variables.");
+  process.exit(1);
+}
 
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin || CORS_ORIGINS.length === 0 || CORS_ORIGINS.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error("Origin not allowed"));
+  }
+}));
+
+// Membuat token login Admin
+function makeToken() {
+  const payload = Buffer.from(
+    JSON.stringify({
+      admin: true,
+      exp: Date.now() + 60 * 60 * 1000
+    })
+  ).toString("base64url");
+
+  const signature = crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(payload)
+    .digest("base64url");
+
+  return `${payload}.${signature}`;
+}
+
+// Memeriksa akses khusus Admin
+function adminOnly(req, res, next) {
+  const token = (req.headers.authorization || "")
+    .replace(/^Bearer\s+/i, "");
+
+  const parts = token.split(".");
+
+  if (parts.length !== 2) {
+    return res.status(401).json({
+      error: "Admin login required"
+    });
+  }
+
+  const [payload, signature] = parts;
+
+  const expected = crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(payload)
+    .digest("base64url");
+
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+
+  if (
+    a.length !== b.length ||
+    !crypto.timingSafeEqual(a, b)
+  ) {
+    return res.status(401).json({
+      error: "Invalid token"
+    });
+  }
+
+  let data;
+
+  try {
+    data = JSON.parse(
+      Buffer.from(payload, "base64url").toString()
+    );
+  } catch {
+    return res.status(401).json({
+      error: "Invalid token"
+    });
+  }
+
+  if (
+    data.admin !== true ||
+    !data.exp ||
+    data.exp < Date.now()
+  ) {
+    return res.status(401).json({
+      error: "Token expired or invalid"
+    });
+  }
+
+  req.admin = true;
+  next();
+}
+
+// Penyimpanan demo KEY sementara
+const keys = new Map();
+
+// Halaman status server
 app.get("/", (_req, res) => {
-  res.json({
-    name: "ZANN ELIMINASI VIP API",
-    status: "online"
-  });
+  res.send("ZANN ELIMINASI VIP Node.js server is running.");
 });
 
 app.get("/api/status", (_req, res) => {
-  res.json({ status: "online", firebase: "initialized" });
+  res.json({
+    ok: true,
+    service: "ZANN ELIMINASI VIP"
+  });
 });
 
-async function user(req, res, next) {
-  try {
-    const h = req.get("authorization") || "";
-    if (!h.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Missing token" });
-    }
+// LOGIN ADMIN
+app.post("/api/admin/login", (req, res) => {
+  const password = req.body?.password;
 
-    req.auth = await admin.auth().verifyIdToken(h.slice(7));
-    next();
-  } catch {
-    return res.status(401).json({ error: "Invalid token" });
-  }
-}
-
-function adminOnly(req, res, next) {
-  if (req.auth?.admin === true) return next();
-  return res.status(403).json({ error: "Admin required" });
-}
-
-// GAME DATA
-app.get("/api/hosts/:hostId/game", user, async (req, res) => {
-  try {
-    const id = String(req.params.hostId).slice(0, 100);
-    const ref = db.collection("users")
-      .doc(req.auth.uid)
-      .collection("hosts")
-      .doc(id);
-
-    const s = await ref.get();
-
-    res.json({
-      hostId: id,
-      data: s.exists ? s.data() : {}
+  if (
+    typeof password !== "string" ||
+    password !== ADMIN_PASSWORD
+  ) {
+    return res.status(401).json({
+      error: "Password admin salah"
     });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Read failed" });
   }
+
+  res.json({
+    ok: true,
+    token: makeToken(),
+    expiresIn: 3600
+  });
 });
 
-app.put("/api/hosts/:hostId/game", user, async (req, res) => {
-  try {
-    if (!req.body || typeof req.body !== "object" ||
-        Array.isArray(req.body)) {
-      return res.status(400).json({ error: "Invalid payload" });
-    }
-
-    const id = String(req.params.hostId).slice(0, 100);
-
-    await db.collection("users")
-      .doc(req.auth.uid)
-      .collection("hosts")
-      .doc(id)
-      .set({
-        ...req.body,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-    res.json({ ok: true, hostId: id });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Save failed" });
-  }
+// Pemeriksaan login Admin
+app.get("/api/admin/check", adminOnly, (_req, res) => {
+  res.json({
+    ok: true,
+    admin: true
+  });
 });
 
-// CREATE KEY (ADMIN)
-app.post("/api/admin/keys", user, adminOnly, async (req, res) => {
-  try {
-    const { duration } = req.body || {};
+// GENERATE KEY — KHUSUS ADMIN
+app.post("/api/admin/keys", adminOnly, (req, res) => {
+  const duration = req.body?.duration;
 
-    if (![3, 7, 30, "permanent"].includes(duration)) {
-      return res.status(400).json({
-        error: "duration must be 3, 7, 30, or permanent"
-      });
-    }
-
-    const key = crypto.randomBytes(18).toString("hex").toUpperCase();
-
-    const expiresAt = duration === "permanent"
-      ? null
-      : Date.now() + duration * 86400000;
-
-    await db.collection("keys").doc(key).set({
-      duration,
-      expiresAt,
-      active: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      issuedBy: req.auth.uid,
-      redeemedBy: null
+  if (![3, 7, 30, "permanent"].includes(duration)) {
+    return res.status(400).json({
+      error: "Durasi harus 3, 7, 30, atau permanent"
     });
+  }
 
-    res.json({
+  const key =
+    "ZANN-" +
+    crypto.randomBytes(12).toString("hex").toUpperCase();
+
+  keys.set(key, {
+    duration,
+    createdAt: new Date().toISOString(),
+    used: false
+  });
+
+  res.json({
+    ok: true,
+    key,
+    duration
+  });
+});
+
+// DAFTAR KEY — KHUSUS ADMIN
+app.get("/api/admin/keys", adminOnly, (_req, res) => {
+  res.json({
+    keys: [...keys.entries()].map(([key, info]) => ({
       key,
-      duration,
-      expiresAt,
-      permanent: duration === "permanent"
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Create failed" });
-  }
+      ...info
+    }))
+  });
 });
 
 // REDEEM KEY
-app.post("/api/keys/redeem", user, async (req, res) => {
-  const key = String(req.body?.key || "").trim().toUpperCase();
+app.post("/api/keys/redeem", (req, res) => {
+  const key = req.body?.key;
+  const record = keys.get(key);
 
-  if (!key) {
-    return res.status(400).json({ error: "Key required" });
-  }
-
-  try {
-    const ref = db.collection("keys").doc(key);
-
-    const result = await db.runTransaction(async tx => {
-      const s = await tx.get(ref);
-
-      if (!s.exists) return { error: "Invalid key" };
-
-      const d = s.data();
-
-      if (!d.active) return { error: "Key disabled" };
-
-      if (d.expiresAt !== null && d.expiresAt <= Date.now()) {
-        return { error: "Key expired" };
-      }
-
-      if (d.redeemedBy && d.redeemedBy !== req.auth.uid) {
-        return { error: "Key already used" };
-      }
-
-      tx.update(ref, { redeemedBy: req.auth.uid });
-
-      tx.set(
-        db.collection("users").doc(req.auth.uid),
-        {
-          entitlement: {
-            duration: d.duration,
-            expiresAt: d.expiresAt,
-            keyId: key
-          }
-        },
-        { merge: true }
-      );
-
-      return {
-        ok: true,
-        duration: d.duration,
-        expiresAt: d.expiresAt
-      };
+  if (!record) {
+    return res.status(404).json({
+      error: "KEY tidak ditemukan"
     });
-
-    if (result.error) {
-      return res.status(400).json({ error: result.error });
-    }
-
-    res.json(result);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Redeem failed" });
   }
+
+  if (record.used) {
+    return res.status(409).json({
+      error: "KEY sudah digunakan"
+    });
+  }
+
+  record.used = true;
+  record.usedAt = new Date().toISOString();
+
+  res.json({
+    ok: true,
+    duration: record.duration
+  });
 });
 
-// RELAY EVENT
-app.post("/api/relay/events", async (req, res) => {
-  if (!process.env.RELAY_SECRET ||
-      req.get("x-relay-secret") !== process.env.RELAY_SECRET) {
-    return res.status(401).json({ error: "Unauthorized relay" });
-  }
+// Penanganan error
+app.use((err, _req, res, _next) => {
+  console.error(err?.message || err);
 
-  const { hostUid, hostId, eventId, event } = req.body || {};
-
-  if (![hostUid, hostId, eventId].every(
-    v => typeof v === "string" && v
-  ) || !event || typeof event !== "object") {
-    return res.status(400).json({ error: "Required fields missing" });
-  }
-
-  try {
-    const dedupe = db.collection("relayEvents").doc(eventId);
-    const host = db.collection("users")
-      .doc(hostUid)
-      .collection("hosts")
-      .doc(hostId);
-
-    const accepted = await db.runTransaction(async tx => {
-      if ((await tx.get(dedupe)).exists) return false;
-
-      tx.create(dedupe, {
-        hostUid,
-        hostId,
-        receivedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      tx.set(host, {
-        latestRelayEvent: event,
-        relayUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      return true;
-    });
-
-    res.json({
-      accepted,
-      duplicate: !accepted
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Relay event failed" });
-  }
+  res.status(500).json({
+    error: "Server error"
+  });
 });
 
-app.use((e, _q, r, _n) => {
-  console.error(e);
-  r.status(500).json({ error: "Server error" });
-});
-
+// Jalankan server
 app.listen(PORT, () => {
-  console.log("API listening on " + PORT);
+  console.log(`Server listening on port ${PORT}`);
 });
